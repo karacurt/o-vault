@@ -4,13 +4,12 @@ import { ethers } from "hardhat";
 import { ContractFactory, Contract } from "ethers";
 
 interface TrustedTokens {
-  address: string;
+  nftAddress: string;
   isTrusted: boolean;
 }
 
 describe("NftVault", function () {
-  let deployer: SignerWithAddress;
-  let operator: SignerWithAddress;
+  let admin: SignerWithAddress;
   let player1: SignerWithAddress;
   let player2: SignerWithAddress;
 
@@ -20,64 +19,75 @@ describe("NftVault", function () {
   let Nft: ContractFactory;
   let nft: Contract;
 
-  const zeroAddress = ethers.constants.AddressZero;
-
   before(async function () {
-    [deployer, operator, player1, player2] = await ethers.getSigners();
+    [admin, player1, player2] = await ethers.getSigners();
   });
 
   beforeEach(async function () {
-    Nft = await ethers.getContractFactory("ERC721");
-    nft = await Nft.deploy("NonFungibleToken", "NFT", "https://nft.com/");
+    Nft = await ethers.getContractFactory("MyNft");
+    nft = await Nft.connect(admin).deploy(
+      "NonFungibleToken",
+      "NFT",
+      "https://nft.com/"
+    );
+    await nft.deployed();
 
     Vault = await ethers.getContractFactory("NftVault");
-    vault = await Vault.deploy(operator.address);
+    vault = await Vault.connect(admin).deploy();
     await vault.deployed();
 
     const trustedTokens: TrustedTokens[] = [
-      { address: nft.address, isTrusted: true },
+      { nftAddress: nft.address, isTrusted: true },
     ];
 
-    await vault.connect(operator).setTrustedTokens(trustedTokens);
+    await vault.connect(admin).setTrustedTokens(trustedTokens);
 
-    await nft.connect(operator).mint(player1.address, 1);
+    await nft.connect(admin).mint(player1.address);
+    await nft.connect(player1).setApprovalForAll(vault.address, true);
   });
 
   describe("Deployment", function () {
-    it("should NOT deploy if operator is invalid", async function () {
+    it("should  deploy", async function () {
       const contract = await ethers.getContractFactory("NftVault");
-      await expect(contract.deploy([zeroAddress])).to.be.revertedWith(
-        "INV_ADDRESS"
-      );
+      await expect(contract.deploy()).to.be.fulfilled;
     });
   });
 
   describe("Deposits", function () {
-    const nftId = 1;
+    const nftId = 0;
     it("should deposit NFT", async function () {
-      await expect(vault.deposit(nft.address, 1)).to.emit(vault, "Deposit");
+      await expect(vault.connect(player1).deposit(nft.address, nftId)).to.emit(
+        vault,
+        "DepositedNft"
+      );
     });
   });
 
   describe("Withdrawals", function () {
-    const nftId = 1;
+    const nftId = 0;
     it("should withdraw NFT", async function () {
-      await expect(vault.deposit(nft.address, nftId)).to.emit(vault, "Deposit");
-      await expect(vault.withdraw(nft.address, nftId)).to.emit(
+      await expect(vault.connect(player1).deposit(nft.address, nftId)).to.emit(
         vault,
-        "Withdraw"
+        "DepositedNft"
+      );
+      await expect(vault.connect(player1).withdraw(nft.address, nftId)).to.emit(
+        vault,
+        "WithdrewNft"
       );
     });
     it("should NOT withdraw NFT if balance is 0", async function () {
-      await expect(vault.withdraw(nft.address, nftId)).to.be.revertedWith(
-        "INV_BALANCE"
-      );
+      await expect(
+        vault.connect(player1).withdraw(nft.address, nftId)
+      ).to.be.revertedWith("NOT_DEPOSITED");
     });
     it("should let admin withdraw on behaf of player", async function () {
-      await expect(vault.deposit(nft.address, nftId)).to.emit(vault, "Deposit");
+      await expect(vault.connect(player1).deposit(nft.address, nftId)).to.emit(
+        vault,
+        "DepositedNft"
+      );
       await expect(
-        vault.connect(operator).withdraw(nft.address, nftId)
-      ).to.emit(vault, "Withdraw");
+        vault.connect(admin).withdrawByAdmin(nft.address, nftId)
+      ).to.emit(vault, "WithdrewNft");
     });
   });
 });
