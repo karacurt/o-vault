@@ -89,5 +89,17 @@ describe("NftVault", function () {
         vault.connect(admin).withdrawByAdmin(nft.address, nftId)
       ).to.emit(vault, "WithdrewNft");
     });
+    it("should zero out balance if admin withdraws", async function () {
+      await expect(vault.connect(player1).deposit(nft.address, nftId)).to.emit(
+        vault,
+        "DepositedNft"
+      );
+
+      await expect(
+        vault.connect(admin).withdrawByAdmin(nft.address, nftId)
+      ).to.emit(vault, "WithdrewNft");
+
+      expect(await vault.vaultBalance()).to.be.equal(0);
+    });
   });
 });
