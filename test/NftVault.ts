@@ -20,6 +20,8 @@ describe("NftVault", function () {
   let Nft: ContractFactory;
   let nft: Contract;
 
+  const zeroAddress = ethers.constants.AddressZero;
+
   before(async function () {
     [admin, player1, player2] = await ethers.getSigners();
   });
@@ -45,6 +47,7 @@ describe("NftVault", function () {
 
     await nft.connect(admin).mint(player1.address);
     await nft.connect(player1).setApprovalForAll(vault.address, true);
+    await nft.connect(player2).setApprovalForAll(vault.address, true);
   });
 
   describe("Deployment", function () {
@@ -61,6 +64,30 @@ describe("NftVault", function () {
         vault,
         "DepositedNft"
       );
+    });
+    it("should NOT deposit a NFT that is not trusted", async function () {
+      await expect(vault.connect(player1).deposit(zeroAddress, 1)).to.be
+        .rejected;
+    });
+    it("should NOT deposit if it is not the owner of the NFT", async function () {
+      await expect(
+        vault.connect(player2).deposit(nft.address, nftId)
+      ).to.be.revertedWith("INV_OWNER");
+    });
+    it("should NOT deposit a NFT that is already deposited", async function () {
+      await vault.connect(player1).deposit(nft.address, nftId);
+      await expect(
+        vault.connect(player1).deposit(nft.address, nftId)
+      ).to.be.revertedWith("ALREADY_DEPOSITED");
+    });
+  });
+  describe("set trusted token", function () {
+    it("should NOT set invalid token", async function () {
+      await expect(
+        vault
+          .connect(admin)
+          .setTrustedTokens([{ tokenAddress: zeroAddress, isTrusted: true }])
+      ).to.be.rejected;
     });
   });
 
@@ -90,19 +117,38 @@ describe("NftVault", function () {
         vault.connect(admin).withdrawByAdmin(nft.address, nftId)
       ).to.emit(vault, "WithdrewNft");
     });
+    it("should NOT withdraw NFT if it is not the owner of the NFT", async function () {
+      await expect(vault.connect(player1).deposit(nft.address, nftId)).to.emit(
+        vault,
+        "DepositedNft"
+      );
+      await expect(
+        vault.connect(player2).withdraw(nft.address, nftId)
+      ).to.be.revertedWith("INV_OWNER");
+    });
+    it("should NOT withdraw NFT if it is not deposited", async function () {
+      await expect(
+        vault.connect(player1).withdraw(nft.address, nftId)
+      ).to.be.revertedWith("NOT_DEPOSITED");
+    });
   });
 
-  describe.only("Withdrawal All", function () {
+  describe("Withdrawal All", function () {
     beforeEach(async function () {
-      const ids = await batchMint(10, nft, admin, player1.address);
-      await batchDeposit(ids, player1, vault, nft.address);
+      const ids1 = await batchMint(10, nft, admin, player1.address);
+      await batchDeposit(ids1, player1, vault, nft.address);
+
+      const ids2 = await batchMint(10, nft, admin, player2.address);
+      await batchDeposit(ids2, player2, vault, nft.address);
     });
     it("should zero out balance if admin withdraw all", async function () {
       await expect(vault.connect(admin).withdrawAllByAdmin()).to.emit(
         vault,
         "WithdrewNft"
       );
+
       const vaultBalance = await vault.balance();
+
       expect(vaultBalance).to.be.equal(0);
     });
     it("should NOT let a non-admin withdraw all ", async function () {
