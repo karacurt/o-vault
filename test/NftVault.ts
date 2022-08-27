@@ -2,6 +2,7 @@ import { expect } from "chai";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { ethers } from "hardhat";
 import { ContractFactory, Contract } from "ethers";
+import { batchDeposit, batchMint } from "../fixture/NftVaultFixture";
 
 interface TrustedTokens {
   nftAddress: string;
@@ -89,17 +90,36 @@ describe("NftVault", function () {
         vault.connect(admin).withdrawByAdmin(nft.address, nftId)
       ).to.emit(vault, "WithdrewNft");
     });
-    it("should zero out balance if admin withdraws", async function () {
-      await expect(vault.connect(player1).deposit(nft.address, nftId)).to.emit(
+  });
+
+  describe.only("Withdrawal All", function () {
+    beforeEach(async function () {
+      const ids = await batchMint(10, nft, admin, player1.address);
+      await batchDeposit(ids, player1, vault, nft.address);
+    });
+    it("should zero out balance if admin withdraw all", async function () {
+      await expect(vault.connect(admin).withdrawAllByAdmin()).to.emit(
         vault,
-        "DepositedNft"
+        "WithdrewNft"
       );
-
+      const vaultBalance = await vault.balance();
+      expect(vaultBalance).to.be.equal(0);
+    });
+    it("should NOT let a non-admin withdraw all ", async function () {
       await expect(
-        vault.connect(admin).withdrawByAdmin(nft.address, nftId)
-      ).to.emit(vault, "WithdrewNft");
+        vault.connect(player2).withdrawAllByAdmin()
+      ).to.be.revertedWith("INV_ADMIN");
+    });
+    it("should withdraw all tokens from a player", async function () {
+      const playerBalanceBefore = await vault.balanceOf(player1.address);
+      expect(playerBalanceBefore).to.be.not.equal(0);
 
-      expect(await vault.vaultBalance()).to.be.equal(0);
+      await expect(vault.connect(player1).withdrawAll()).to.emit(
+        vault,
+        "WithdrewNft"
+      );
+      const playerBalanceAfter = await vault.balanceOf(player1.address);
+      expect(playerBalanceAfter).to.be.equal(0);
     });
   });
 });

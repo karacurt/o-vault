@@ -114,6 +114,13 @@ contract NftVault {
         delete holderToIndex[_holderAddress];
     }
 
+    function balance() public view returns (uint) {
+        return vaultBalance;
+    }
+
+    function balanceOf(address _owner) public view returns (uint) {
+        return playerToBalance[_owner];
+    }
     
     function deposit(address _nftAddress, uint256 _tokenId) external isTrustedToken(_nftAddress){
         address tokenOwner = IERC721(_nftAddress).ownerOf(_tokenId);
@@ -145,7 +152,7 @@ contract NftVault {
 
         tokenToIdToOwner[_nftAddress][_tokenId] = address(0);
         _deletePlayerInfo(_tokenId, tokenOwner, _nftAddress);
-        
+
         playerToBalance[tokenOwner]--;
         vaultBalance--;
 
@@ -166,7 +173,7 @@ contract NftVault {
         for(uint i = 0; i < trustedTokenAddresses.length; i++){
             address nftAddress = trustedTokenAddresses[i];
             uint256[] memory _ids = playerTokens[msg.sender][nftAddress].ids;
-            for(uint j = 0; j < _ids.length; j++){
+            for(uint j = 1; j < _ids.length; j++){
                 uint256 id = _ids[j];
                 withdraw(nftAddress, id);
             }
@@ -179,7 +186,7 @@ contract NftVault {
             for(uint i = 0; i < trustedTokenAddresses.length; i++){
                 address nftAddress = trustedTokenAddresses[i];
                 uint256[] memory _ids = playerTokens[holder][nftAddress].ids;
-                    for(uint j = 0; j < _ids.length; j++){
+                    for(uint j = 1; j < _ids.length; j++){
                         uint256 id = _ids[j];
                         withdraw(nftAddress, id);
                     }
